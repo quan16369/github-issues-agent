@@ -98,7 +98,7 @@ jobs:
 
       - name: Run tests
         env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}

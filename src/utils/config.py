@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    AWS_REGION: str = "eu-central-1"
+    GCP_PROJECT_ID: str = ""
     GH_TOKEN: str = ""
     ISSUES_TABLE_NAME: str = "issues"
     COMMENTS_TABLE_NAME: str = "comments"
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5432"
     ADMINER_PORT: str = "8080"
-    SECRET_NAME: str = ""
+    SECRET_ID: str = ""
     APP_ENV: str = "dev"
     LEN_EMBEDDINGS: int = 1024
     QDRANT_API_KEY: str = ""

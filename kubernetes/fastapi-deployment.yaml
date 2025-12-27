@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: fastapi
-          image: 730335307143.dkr.ecr.eu-central-1.amazonaws.com/fastapi-app:latest
+          image: gcr.io/YOUR_PROJECT_ID/fastapi-app:latest
           ports:
             - containerPort: 8000
           env:
@@ -25,11 +25,11 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: APP_ENV
-            - name: AWS_REGION
+            - name: GCP_PROJECT_ID
               valueFrom:
                 configMapKeyRef:
                   name: app-config
-                  key: AWS_REGION
+                  key: GCP_PROJECT_ID
             - name: POSTGRES_DB
               valueFrom:
                 configMapKeyRef:
@@ -102,17 +102,12 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: GUARDRAILS_API_KEY
-            - name: SECRET_NAME
+            - name: SECRET_ID
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
-                  key: SECRET_NAME
-            # - name: AWS_ACCOUNT_ID
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: aws-account-secret
-            #       key: AWS_ACCOUNT_ID
-
+                  key: SECRET_ID
+                  
           # Startup probe - gives the app time to start
           startupProbe:
             httpGet:
