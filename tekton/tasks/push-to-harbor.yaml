@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: push-to-harbor
+  namespace: tekton-pipelines
+spec:
+  description: Tag and push image to Harbor registry
+  params:
+    - name: source-image
+      description: Source image reference
+      type: string
+    - name: target-image
+      description: Target Harbor image reference
+      type: string
+    - name: skip-tls-verify
+      description: Skip TLS certificate verification
+      type: string
+      default: "false"
+  workspaces:
+    - name: dockerconfig
+      description: Docker config for Harbor authentication
+  steps:
+    - name: push-image
+      image: gcr.io/go-containerregistry/crane:debug
+      env:
+        - name: DOCKER_CONFIG
+          value: $(workspaces.dockerconfig.path)
+      script: |
+        #!/busybox/sh
+        set -e
+        
+        echo "Pushing image to Harbor..."
+        echo "Source: $(params.source-image)"
+        echo "Target: $(params.target-image)"
+        
+        # Copy/retag image to Harbor
+        crane copy \
+          $(params.source-image) \
+          $(params.target-image) \
+          $([ "$(params.skip-tls-verify)" = "true" ] && echo "--insecure" || echo "")
+        
+        echo "Image pushed to Harbor: $(params.target-image)"
+        
+        # Verify image exists
+        echo "Verifying image..."
+        crane manifest $(params.target-image) > /dev/null
+        
+        echo "Image verified in Harbor registry"

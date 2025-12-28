@@ -1,7 +1,0 @@
-project_id   = "your-gcp-project-id"
-region       = "us-central1"
-network_name = "github-issue-agent-vpc"
-db_name      = "github_issues"
-db_user      = "postgres"
-db_password  = "your-secure-password"
-cluster_name = "github-issue-agent-cluster"

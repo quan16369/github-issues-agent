@@ -1,0 +1,154 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/version: "0.9"
+spec:
+  description: Clone a git repository
+  params:
+    - name: url
+      description: Repository URL to clone
+      type: string
+    - name: revision
+      description: Revision to checkout (branch, tag, sha, ref)
+      type: string
+      default: main
+    - name: refspec
+      description: Refspec to fetch before checking out revision
+      default: ""
+    - name: submodules
+      description: Initialize and fetch git submodules
+      type: string
+      default: "true"
+    - name: depth
+      description: Perform a shallow clone (depth 1)
+      type: string
+      default: "1"
+    - name: sslVerify
+      description: Set SSL verification on or off
+      type: string
+      default: "true"
+    - name: subdirectory
+      description: Subdirectory inside workspace to clone the repo
+      type: string
+      default: ""
+    - name: deleteExisting
+      description: Clean out the contents of the destination directory
+      type: string
+      default: "true"
+    - name: httpProxy
+      description: HTTP proxy server
+      type: string
+      default: ""
+    - name: httpsProxy
+      description: HTTPS proxy server
+      type: string
+      default: ""
+    - name: noProxy
+      description: No proxy
+      type: string
+      default: ""
+  workspaces:
+    - name: output
+      description: The git repo will be cloned onto this workspace
+  results:
+    - name: commit
+      description: The precise commit SHA
+    - name: url
+      description: The precise URL that was fetched
+    - name: committer-date
+      description: The commit date
+  steps:
+    - name: clone
+      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.40.2
+      env:
+        - name: HOME
+          value: /home/git
+        - name: PARAM_URL
+          value: $(params.url)
+        - name: PARAM_REVISION
+          value: $(params.revision)
+        - name: PARAM_REFSPEC
+          value: $(params.refspec)
+        - name: PARAM_SUBMODULES
+          value: $(params.submodules)
+        - name: PARAM_DEPTH
+          value: $(params.depth)
+        - name: PARAM_SSL_VERIFY
+          value: $(params.sslVerify)
+        - name: PARAM_SUBDIRECTORY
+          value: $(params.subdirectory)
+        - name: PARAM_DELETE_EXISTING
+          value: $(params.deleteExisting)
+        - name: PARAM_HTTP_PROXY
+          value: $(params.httpProxy)
+        - name: PARAM_HTTPS_PROXY
+          value: $(params.httpsProxy)
+        - name: PARAM_NO_PROXY
+          value: $(params.noProxy)
+        - name: WORKSPACE_OUTPUT_PATH
+          value: $(workspaces.output.path)
+        - name: WORKSPACE_SSH_DIRECTORY_BOUND
+          value: $(workspaces.ssh-directory.bound)
+        - name: WORKSPACE_SSH_DIRECTORY_PATH
+          value: $(workspaces.ssh-directory.path)
+        - name: WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND
+          value: $(workspaces.basic-auth.bound)
+        - name: WORKSPACE_BASIC_AUTH_DIRECTORY_PATH
+          value: $(workspaces.basic-auth.path)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        CHECKOUT_DIR="${WORKSPACE_OUTPUT_PATH}/${PARAM_SUBDIRECTORY}"
+
+        if [ "${PARAM_DELETE_EXISTING}" = "true" ] ; then
+          echo "Cleaning out existing directory: ${CHECKOUT_DIR}"
+          rm -rf "${CHECKOUT_DIR}"
+        fi
+
+        if [ "${WORKSPACE_BASIC_AUTH_DIRECTORY_BOUND}" = "true" ] ; then
+          cp "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.git-credentials" /home/git/.git-credentials
+          cp "${WORKSPACE_BASIC_AUTH_DIRECTORY_PATH}/.gitconfig" /home/git/.gitconfig
+          chmod 400 /home/git/.git-credentials
+          chmod 400 /home/git/.gitconfig
+        fi
+
+        if [ "${WORKSPACE_SSH_DIRECTORY_BOUND}" = "true" ] ; then
+          cp -R "${WORKSPACE_SSH_DIRECTORY_PATH}" /home/git/.ssh
+          chmod 700 /home/git/.ssh
+          chmod -R 400 /home/git/.ssh/*
+        fi
+
+        CLONE_FLAGS=""
+        if [ "${PARAM_DEPTH}" != "0" ] ; then
+          CLONE_FLAGS="${CLONE_FLAGS} --depth=${PARAM_DEPTH}"
+        fi
+        if [ "${PARAM_SSL_VERIFY}" = "false" ] ; then
+          git config --global http.sslVerify false
+        fi
+
+        git clone ${CLONE_FLAGS} "${PARAM_URL}" "${CHECKOUT_DIR}"
+        cd "${CHECKOUT_DIR}"
+        git checkout "${PARAM_REVISION}"
+
+        RESULT_SHA="$(git rev-parse HEAD)"
+        if [ -z "${RESULT_SHA}" ] ; then
+          echo "Unable to get commit SHA"
+          exit 1
+        fi
+        echo -n "${RESULT_SHA}" > $(results.commit.path)
+        echo -n "${PARAM_URL}" > $(results.url.path)
+        
+        git log -1 --date=iso8601-strict --pretty=%cd > $(results.committer-date.path)
+        
+        echo "Successfully cloned ${PARAM_URL} @ ${PARAM_REVISION}"
+  workspaces:
+    - name: ssh-directory
+      optional: true
+      description: SSH credentials
+    - name: basic-auth
+      optional: true
+      description: Basic auth credentials

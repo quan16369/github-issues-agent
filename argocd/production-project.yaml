@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: production
+  namespace: argocd
+spec:
+  description: Production applications with strict policies
+  
+  # Source repositories
+  sourceRepos:
+    - 'https://github.com/your-org/github-issue-agent.git'
+  
+  # Destinations
+  destinations:
+    - namespace: 'production'
+      server: 'https://kubernetes.default.svc'
+  
+  # Cluster resource whitelist
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  
+  # Namespace resource whitelist
+  namespaceResourceWhitelist:
+    - group: 'apps'
+      kind: Deployment
+    - group: 'apps'
+      kind: StatefulSet
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: Secret
+    - group: 'networking.k8s.io'
+      kind: Ingress
+    - group: 'autoscaling'
+      kind: HorizontalPodAutoscaler
+    - group: ''
+      kind: ServiceAccount
+  
+  # Deny certain resources
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+  
+  # Roles for this project
+  roles:
+    - name: admin
+      description: Admin privileges for production
+      policies:
+        - p, proj:production:admin, applications, *, production/*, allow
+      groups:
+        - sre-team
+    
+    - name: readonly
+      description: Read-only access
+      policies:
+        - p, proj:production:readonly, applications, get, production/*, allow
+      groups:
+        - developers
+  
+  # Sync windows (optional)
+  syncWindows:
+    - kind: allow
+      schedule: '0 0-8,18-23 * * *'  # Allow deployments outside business hours
+      duration: 10h
+      applications:
+        - 'github-agent-prod'

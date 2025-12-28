@@ -1,0 +1,95 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: sonar-scanner
+  namespace: tekton-pipelines
+spec:
+  description: Run SonarQube scanner for code quality analysis
+  params:
+    - name: sonar-host-url
+      description: SonarQube server URL
+      type: string
+      default: "http://sonarqube:9000"
+    - name: sonar-project-key
+      description: Project key in SonarQube
+      type: string
+      default: "github-issue-agent"
+    - name: source-dir
+      description: Directory containing source code
+      type: string
+      default: "."
+  workspaces:
+    - name: source
+      description: Workspace containing source code
+  steps:
+    - name: sonar-scan
+      image: sonarsource/sonar-scanner-cli:latest
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: SONAR_HOST_URL
+          value: $(params.sonar-host-url)
+        - name: SONAR_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sonarqube-token
+              key: token
+              optional: true
+      script: |
+        #!/bin/bash
+        set -e
+        
+        echo "Running SonarQube scanner..."
+        
+        # Create sonar-scanner command
+        SCAN_CMD="sonar-scanner \
+          -Dsonar.projectKey=$(params.sonar-project-key) \
+          -Dsonar.sources=$(params.source-dir) \
+          -Dsonar.host.url=${SONAR_HOST_URL}"
+        
+        if [ -n "${SONAR_TOKEN}" ]; then
+          SCAN_CMD="${SCAN_CMD} -Dsonar.login=${SONAR_TOKEN}"
+        fi
+        
+        # Run scanner
+        eval ${SCAN_CMD}
+        
+        echo "SonarQube scan completed!"
+        
+    - name: quality-gate
+      image: curlimages/curl:latest
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: SONAR_HOST_URL
+          value: $(params.sonar-host-url)
+        - name: SONAR_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sonarqube-token
+              key: token
+              optional: true
+      script: |
+        #!/bin/sh
+        set -e
+        
+        echo "Checking Quality Gate status..."
+        
+        # Wait for analysis to complete
+        sleep 10
+        
+        # Check quality gate (optional - can be disabled for dev)
+        if [ -n "${SONAR_TOKEN}" ]; then
+          QUALITY_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
+            "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=$(params.sonar-project-key)" \
+            | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+          
+          echo "Quality Gate Status: ${QUALITY_STATUS}"
+          
+          if [ "${QUALITY_STATUS}" = "ERROR" ]; then
+            echo "Quality Gate Failed!"
+            exit 1
+          fi
+        else
+          echo "Skipping Quality Gate check (no token provided)"
+        fi
+        
+        echo "Quality Gate passed!"

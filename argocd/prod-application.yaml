@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: github-agent-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: prod-deployments
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: prod-alerts
+spec:
+  project: production
+  
+  source:
+    repoURL: https://github.com/your-org/github-issue-agent.git
+    targetRevision: main
+    path: kubernetes/manifests/overlays/prod
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  
+  syncPolicy:
+    # Manual sync for production (can be automated after testing)
+    automated:
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  revisionHistoryLimit: 10
+  
+  # Health checks
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Ignore HPA-managed replicas
+  
+  # Sync windows (optional - prevent deployments during business hours)
+  # syncPolicy:
+  #   syncWindows:
+  #     - kind: deny
+  #       schedule: '0 9-17 * * 1-5'  # Deny 9AM-5PM Mon-Fri
+  #       duration: 8h
+  #       applications:
+  #         - github-agent-prod

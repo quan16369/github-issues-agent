@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+data:
+  overview.json: |-
+{{ .Files.Get "dashboards/overview.json" | indent 4 }}
+  agent-performance.json: |-
+{{ .Files.Get "dashboards/agent-performance.json" | indent 4 }}
+  business-metrics.json: |-
+{{ .Files.Get "dashboards/business-metrics.json" | indent 4 }}
