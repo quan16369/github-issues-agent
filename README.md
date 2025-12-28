@@ -152,12 +152,3 @@ Internet → Nginx Ingress → FastAPI → LangGraph Agents
 ### Production Deployment
 
 See the [Deployment Guide](DEPLOYMENT_GUIDE.md) for complete production deployment instructions on GCP.
-
-## Contributing
-
-Please read our contributing guidelines before submitting pull requests.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
