@@ -19,7 +19,8 @@ This document summarizes the complete transformation of the GitHub Issue Agent p
 ├── iac/terraform/               # Infrastructure as Code
 │   ├── modules/                 # Reusable Terraform modules
 │   └── environments/            # Dev/Staging/Prod configs
-├── k8s/                         # GitOps manifests  
+├── kubernetes/                  # Kubernetes resources
+│   ├── manifests/               # GitOps manifests  
 │   ├── base/                    # Base Kustomize
 │   └── overlays/                # Environment-specific
 ├── tekton/                      # CI/CD pipelines
@@ -204,7 +205,7 @@ helm install github-agent helm_charts/github-agent \
 # Or deploy via ArgoCD (GitOps)
 argocd app create github-agent-dev \
   --repo https://github.com/your-org/github-issue-agent \
-  --path k8s/overlays/dev \
+  --path kubernetes/manifests/overlays/dev \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace github-agent-dev \
   --sync-policy automated
@@ -265,7 +266,8 @@ github-issue-agent/
 │   ├── environments/            # Dev, staging, prod
 │   ├── setup-gcp-project.sh     # Automated setup
 │   └── README.md                # Deployment guide
-├── k8s/                         # GitOps configs
+├── kubernetes/                  # Kubernetes resources
+│   ├── manifests/               # GitOps configs
 │   ├── base/                    # Base manifests
 │   └── overlays/                # Environment patches
 ├── tekton/                      # CI/CD

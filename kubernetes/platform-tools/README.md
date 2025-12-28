@@ -145,7 +145,7 @@ kubectl get svc -n ingress-nginx ingress-nginx-controller
    ```bash
    argocd app create github-agent-dev \
      --repo https://github.com/your-org/github-issue-agent \
-     --path k8s/overlays/dev \
+     --path kubernetes/manifests/overlays/dev \
      --dest-server https://kubernetes.default.svc \
      --dest-namespace github-agent-dev
    ```

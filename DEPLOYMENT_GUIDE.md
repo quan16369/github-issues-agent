@@ -128,7 +128,8 @@ github-issue-agent/
 │   ├── Chart.yaml
 │   ├── values.yaml
 │   └── templates/
-├── k8s/                            # Kustomize overlays
+├── kubernetes/                     # Kubernetes resources
+│   ├── manifests/                  # Kustomize overlays
 │   ├── base/
 │   └── overlays/
 │       ├── dev/
@@ -174,7 +175,7 @@ Git Push (dev branch)
   → sonar-scanner task (quality check)
   → kaniko-build task (Harbor dev)
   → trivy-scan task (non-blocking)
-  → update-manifest task (k8s/overlays/dev)
+  → update-manifest task (kubernetes/manifests/overlays/dev)
   → ArgoCD Auto-Sync (dev namespace)
 ```
 
@@ -186,7 +187,7 @@ Git Merge (main branch)
   → sonar-scanner (quality gate)
   → kaniko-build (Harbor staging)
   → trivy-scan (CRITICAL/HIGH fail)
-  → update-manifest (k8s/overlays/staging)
+  → update-manifest (kubernetes/manifests/overlays/staging)
   → ArgoCD Auto-Sync (staging namespace)
 ```
 
@@ -198,7 +199,7 @@ Git Tag (v1.0.0)
   → promote-image (staging → prod)
   → trivy-scan (final check)
   → tag-latest
-  → update-manifest (k8s/overlays/prod)
+  → update-manifest (kubernetes/manifests/overlays/prod)
   → ArgoCD Manual Sync (production namespace)
   → Slack notification
 ```

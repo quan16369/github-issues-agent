@@ -33,7 +33,7 @@ spec:
       source:
         repoURL: https://github.com/your-org/github-issue-agent.git
         targetRevision: main
-        path: 'k8s/overlays/{{env}}'
+        path: 'kubernetes/manifests/overlays/{{env}}'
       
       destination:
         server: https://kubernetes.default.svc

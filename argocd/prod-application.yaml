@@ -14,7 +14,7 @@ spec:
   source:
     repoURL: https://github.com/your-org/github-issue-agent.git
     targetRevision: main
-    path: k8s/overlays/prod
+    path: kubernetes/manifests/overlays/prod
   
   destination:
     server: https://kubernetes.default.svc

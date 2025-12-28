@@ -128,7 +128,7 @@ spec:
         - name: git-revision
           value: main
         - name: manifest-dir
-          value: k8s/overlays/dev
+          value: kubernetes/manifests/overlays/dev
         - name: image-name
           value: $(params.image-registry)/agent-dev/$(params.image-name)
         - name: image-tag

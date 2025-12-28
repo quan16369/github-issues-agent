@@ -7,7 +7,7 @@ GitOps deployment configuration for all environments using ArgoCD.
 ```
 GitHub Repository (main branch)
     │
-    └─── k8s/overlays/
+    └─── kubernetes/manifests/overlays/
          ├── dev/          → ArgoCD → Dev Cluster (auto-sync)
          ├── staging/      → ArgoCD → Staging Cluster (auto-sync)
          └── prod/         → ArgoCD → Prod Cluster (manual sync)
@@ -22,7 +22,7 @@ GitHub Repository (main branch)
 - **Auto-Sync:** Enabled
 - **Self-Heal:** Enabled
 - **Prune:** Enabled
-- **Source:** `k8s/overlays/dev`
+- **Source:** `kubernetes/manifests/overlays/dev`
 
 **Behavior:**
 - Automatically syncs on every commit to `main`
@@ -36,7 +36,7 @@ GitHub Repository (main branch)
 - **Auto-Sync:** Enabled
 - **Self-Heal:** Enabled
 - **Prune:** Enabled
-- **Source:** `k8s/overlays/staging`
+- **Source:** `kubernetes/manifests/overlays/staging`
 
 **Behavior:**
 - Same as dev but deployed to staging namespace
@@ -49,7 +49,7 @@ GitHub Repository (main branch)
 - **Auto-Sync:** Manual (recommended)
 - **Self-Heal:** Enabled
 - **Prune:** Disabled (safety)
-- **Source:** `k8s/overlays/prod`
+- **Source:** `kubernetes/manifests/overlays/prod`
 - **Project:** `production` (restricted)
 
 **Behavior:**
@@ -188,7 +188,7 @@ git push origin feature-branch:dev
 # 2. Tekton pipeline runs:
 #    - Build image
 #    - Push to Harbor dev
-#    - Update k8s/overlays/dev/kustomization.yaml with new image tag
+#    - Update kubernetes/manifests/overlays/dev/kustomization.yaml with new image tag
 
 # 3. ArgoCD detects change and auto-syncs
 #    - Deploys to dev namespace
@@ -211,7 +211,7 @@ git push origin main
 #    - Build image
 #    - Security scan
 #    - Push to Harbor staging
-#    - Update k8s/overlays/staging/
+#    - Update kubernetes/manifests/overlays/staging/
 
 # 3. ArgoCD auto-syncs to staging
 argocd app sync github-agent-staging
@@ -227,7 +227,7 @@ git push origin v1.0.0
 # 2. Tekton production pipeline:
 #    - Tests pass
 #    - Promote staging image to prod
-#    - Update k8s/overlays/prod/
+#    - Update kubernetes/manifests/overlays/prod/
 
 # 3. Manual sync in ArgoCD
 argocd app sync github-agent-prod

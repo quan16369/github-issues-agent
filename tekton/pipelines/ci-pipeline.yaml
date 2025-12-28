@@ -89,7 +89,7 @@ spec:
       params:
         - name: GIT_SCRIPT
           value: |
-            cd k8s/overlays/$(params.environment)
+            cd kubernetes/manifests/overlays/$(params.environment)
             kustomize edit set image $(params.image-name):$(params.image-tag)
             git add .
             git commit -m "Update image to $(params.image-tag) for $(params.environment)"

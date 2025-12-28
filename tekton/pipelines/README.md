@@ -29,9 +29,10 @@ Complete CI/CD pipelines for the GitHub Issue Agent with automated builds, tests
             │             └──────────────────┘  └──────────────────┘
             ▼                     │                     │
    ┌─────────────────┐           ▼                     ▼
-   │ k8s/overlays/   │   ┌──────────────────┐  ┌──────────────────┐
-   │     dev         │   │ k8s/overlays/    │  │ k8s/overlays/    │
-   └─────────────────┘   │   staging        │  │    prod          │
+   │ kubernetes/     │   ┌──────────────────┐  ┌──────────────────┐
+   │ manifests/      │   │ kubernetes/      │  │ kubernetes/      │
+   │ overlays/dev    │   │ manifests/       │  │ manifests/       │
+   └─────────────────┘   │ overlays/staging │  │ overlays/prod    │
             │             └──────────────────┘  └──────────────────┘
             ▼                     │                     │
    ┌─────────────────┐           ▼                     ▼
@@ -52,7 +53,7 @@ Complete CI/CD pipelines for the GitHub Issue Agent with automated builds, tests
 2. **code-quality-scan** - Run SonarQube analysis
 3. **build-image** - Build Docker image with Kaniko
 4. **security-scan** - Scan with Trivy (non-blocking)
-5. **update-manifest** - Update k8s/overlays/dev
+5. **update-manifest** - Update kubernetes/manifests/overlays/dev
 
 **Image Tag:** `dev-<commit-sha>`
 
@@ -70,7 +71,7 @@ Complete CI/CD pipelines for the GitHub Issue Agent with automated builds, tests
 3. **code-quality-scan** - SonarQube with quality gate
 4. **build-image** - Build production-ready image
 5. **security-scan** - Trivy scan (CRITICAL/HIGH fail)
-6. **update-manifest** - Update k8s/overlays/staging
+6. **update-manifest** - Update kubernetes/manifests/overlays/staging
 
 **Image Tag:** `staging-<commit-sha>`
 
@@ -89,7 +90,7 @@ Complete CI/CD pipelines for the GitHub Issue Agent with automated builds, tests
 3. **promote-image** - Copy staging image to prod
 4. **security-scan** - Final Trivy scan
 5. **tag-latest** - Tag as latest
-6. **update-manifest** - Update k8s/overlays/prod
+6. **update-manifest** - Update kubernetes/manifests/overlays/prod
 
 **Image Tag:** Tag name (e.g., `v1.0.0`) + `latest`
 

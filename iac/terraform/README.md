@@ -222,4 +222,4 @@ gcloud config set project <project-id>
 After infrastructure deployment:
 1. Install platform tools (Harbor, Tekton, ArgoCD) - see `../../../kubernetes/`
 2. Deploy application using Helm - see `../../../helm_charts/`
-3. Configure GitOps with ArgoCD - see `../../../k8s/`
+3. Configure GitOps with ArgoCD - see `../../../kubernetes/manifests/`
