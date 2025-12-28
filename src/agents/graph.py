@@ -1,8 +1,10 @@
 import argparse
 import asyncio
+import time
 
 from langgraph.graph import END, StateGraph
 from loguru import logger
+from opentelemetry import trace
 
 from src.agents.agents import (
     classification_agent,
@@ -12,6 +14,13 @@ from src.agents.agents import (
     recommendation_agent,
 )
 from src.models.agent_models import IssueState
+
+# Get tracer for manual instrumentation
+try:
+    from src.utils.telemetry import get_tracer
+    tracer = None  # Will be initialized when telemetry is set up
+except ImportError:
+    tracer = None
 
 
 def build_issue_workflow() -> StateGraph:

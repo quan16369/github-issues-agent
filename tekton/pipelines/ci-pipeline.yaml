@@ -1,0 +1,96 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: github-agent-ci
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL
+    - name: git-revision
+      type: string
+      description: Git revision (branch/tag/commit)
+      default: main
+    - name: image-name
+      type: string
+      description: Image name with registry
+    - name: image-tag
+      type: string
+      description: Image tag
+      default: latest
+    - name: environment
+      type: string
+      description: Target environment (dev/staging/prod)
+      default: dev
+  
+  workspaces:
+    - name: shared-workspace
+    - name: docker-credentials
+  
+  tasks:
+    - name: fetch-repository
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+    
+    - name: run-tests
+      taskRef:
+        name: run-tests
+      runAfter:
+        - fetch-repository
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: python-version
+          value: "3.11"
+    
+    - name: build-push-image
+      taskRef:
+        name: build-push-image
+      runAfter:
+        - run-tests
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: image
+          value: "$(params.image-name):$(params.image-tag)"
+        - name: dockerfile
+          value: ./docker/prod.Dockerfile
+    
+    - name: security-scan
+      taskRef:
+        name: security-scan
+      runAfter:
+        - build-push-image
+      params:
+        - name: image
+          value: "$(params.image-name):$(params.image-tag)"
+    
+    - name: update-gitops-repo
+      taskRef:
+        name: git-cli
+        kind: ClusterTask
+      runAfter:
+        - security-scan
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: GIT_SCRIPT
+          value: |
+            cd k8s/overlays/$(params.environment)
+            kustomize edit set image $(params.image-name):$(params.image-tag)
+            git add .
+            git commit -m "Update image to $(params.image-tag) for $(params.environment)"
+            git push origin main

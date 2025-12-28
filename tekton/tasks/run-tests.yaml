@@ -1,0 +1,40 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-tests
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: python-version
+      description: Python version to use
+      default: "3.11"
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: install-dependencies
+      image: python:$(params.python-version)-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/bash
+        set -e
+        pip install --upgrade pip
+        pip install uv
+        uv pip install --system -e ".[dev,test]"
+    
+    - name: run-unit-tests
+      image: python:$(params.python-version)-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/bash
+        set -e
+        pytest tests/unit -v --cov=src --cov-report=xml --cov-report=term
+    
+    - name: run-linting
+      image: python:$(params.python-version)-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/bash
+        set -e
+        ruff check src/ tests/
+        mypy src/

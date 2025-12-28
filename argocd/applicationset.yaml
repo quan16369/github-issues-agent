@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: github-agent-all-envs
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - env: dev
+            namespace: default
+            replicas: 1
+            autoSync: true
+            prune: true
+          - env: staging
+            namespace: staging
+            replicas: 2
+            autoSync: true
+            prune: true
+          - env: prod
+            namespace: production
+            replicas: 3
+            autoSync: false  # Manual sync for prod
+            prune: false
+  
+  template:
+    metadata:
+      name: 'github-agent-{{env}}'
+      namespace: argocd
+    spec:
+      project: '{{#if (eq env "prod")}}production{{else}}default{{/if}}'
+      
+      source:
+        repoURL: https://github.com/your-org/github-issue-agent.git
+        targetRevision: main
+        path: 'k8s/overlays/{{env}}'
+      
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+      
+      syncPolicy:
+        automated:
+          prune: '{{prune}}'
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas

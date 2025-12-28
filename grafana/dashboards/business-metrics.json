@@ -1,0 +1,238 @@
+{
+  "dashboard": {
+    "title": "GitHub Issue Agent - Business Metrics",
+    "uid": "github-agent-business",
+    "tags": ["github-agent", "business", "kpi"],
+    "timezone": "browser",
+    "schemaVersion": 36,
+    "refresh": "1m",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "Issues Processed (Last 6 Hours)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(issues_processed_total[6h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "short",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "title": "Issues Processed (Today)",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(issues_processed_total[24h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "title": "OpenAI Tokens Consumed (Last 6h)",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(openai_tokens_consumed_total[6h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 100000, "color": "yellow"},
+                {"value": 500000, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Guardrail Block Rate (%)",
+        "type": "gauge",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "100 * sum(rate(guardrail_blocks_total[5m])) / sum(rate(agent_executions_total{agent=~\".*guardrail\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 15, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Issues Processed Over Time",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(increase(issues_processed_total[1h]))",
+            "legendFormat": "Issues/hour",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "Issues", "format": "short"},
+          {"show": false}
+        ],
+        "bars": true,
+        "lines": false
+      },
+      {
+        "title": "OpenAI Token Usage Over Time",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (model) (rate(openai_tokens_consumed_total[5m]) * 60)",
+            "legendFormat": "{{model}} (tokens/min)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "Tokens/min", "format": "short"},
+          {"show": false}
+        ]
+      },
+      {
+        "title": "OpenAI API Requests",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(openai_requests_total[5m]))",
+            "legendFormat": "Requests/sec",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "req/sec", "format": "short"},
+          {"show": false}
+        ]
+      },
+      {
+        "title": "Estimated OpenAI Cost (Last 6h)",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(increase(openai_tokens_consumed_total[6h])) * 0.00002",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "textMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 10, "color": "yellow"},
+                {"value": 50, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Vector Search Performance",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(vector_searches_total[5m])",
+            "legendFormat": "Searches/sec",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "searches/sec", "format": "short"},
+          {"show": false}
+        ]
+      },
+      {
+        "title": "Vector Search Latency",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(vector_search_duration_seconds_sum[5m]) / rate(vector_search_duration_seconds_count[5m])",
+            "legendFormat": "Avg Latency",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(vector_search_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95 Latency",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"label": "seconds", "format": "s"},
+          {"show": false}
+        ]
+      }
+    ]
+  }
+}

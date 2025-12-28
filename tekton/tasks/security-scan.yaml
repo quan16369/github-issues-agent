@@ -1,0 +1,27 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: security-scan
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: image
+      description: Reference of the image to scan
+      type: string
+  steps:
+    - name: trivy-scan
+      image: aquasec/trivy:latest
+      args:
+        - image
+        - --severity
+        - HIGH,CRITICAL
+        - --exit-code
+        - "1"
+        - $(params.image)
+    
+    - name: checkov-scan
+      image: bridgecrew/checkov:latest
+      workingDir: /workspace
+      script: |
+        #!/bin/bash
+        checkov -d /workspace --framework kubernetes --soft-fail

@@ -1,0 +1,223 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: dev-pipeline
+  namespace: tekton-pipelines
+  labels:
+    environment: dev
+spec:
+  description: Development pipeline - triggered on push to dev branch
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL
+      default: https://github.com/your-org/github-issue-agent.git
+    - name: git-revision
+      type: string
+      description: Git revision to build
+      default: dev
+    - name: image-registry
+      type: string
+      description: Harbor registry URL
+      default: harbor.example.com
+    - name: image-name
+      type: string
+      description: Image name
+      default: github-agent
+    - name: image-tag
+      type: string
+      description: Image tag
+      default: dev-latest
+    - name: sonar-host-url
+      type: string
+      description: SonarQube server URL
+      default: http://sonarqube:9000
+  
+  workspaces:
+    - name: shared-workspace
+      description: Shared workspace for pipeline steps
+    - name: docker-credentials
+      description: Docker credentials for Harbor
+    - name: git-credentials
+      description: Git credentials for pushing manifest updates
+      optional: true
+  
+  tasks:
+    # 1. Clone source code
+    - name: fetch-repository
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+        - name: deleteExisting
+          value: "true"
+    
+    # 2. Run SonarQube scan
+    - name: code-quality-scan
+      taskRef:
+        name: sonar-scanner
+      runAfter:
+        - fetch-repository
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: sonar-host-url
+          value: $(params.sonar-host-url)
+        - name: sonar-project-key
+          value: github-issue-agent-dev
+    
+    # 3. Build Docker image with Kaniko
+    - name: build-image
+      taskRef:
+        name: kaniko-build
+      runAfter:
+        - code-quality-scan
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: dockerconfig
+          workspace: docker-credentials
+      params:
+        - name: image
+          value: $(params.image-registry)/agent-dev/$(params.image-name):$(params.image-tag)
+        - name: dockerfile
+          value: ./docker/prod-optimized.Dockerfile
+        - name: extra-args
+          value:
+            - --build-arg=ENVIRONMENT=development
+            - --label=git-commit=$(tasks.fetch-repository.results.commit)
+    
+    # 4. Scan image for vulnerabilities
+    - name: security-scan
+      taskRef:
+        name: trivy-scan
+      runAfter:
+        - build-image
+      workspaces:
+        - name: manifest-dir
+          workspace: shared-workspace
+      params:
+        - name: image
+          value: $(params.image-registry)/agent-dev/$(params.image-name):$(params.image-tag)
+        - name: severity
+          value: "CRITICAL"
+        - name: exit-code
+          value: "0"  # Don't fail on vulnerabilities in dev
+    
+    # 5. Update GitOps manifest
+    - name: update-manifest
+      taskRef:
+        name: update-manifest
+      runAfter:
+        - security-scan
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: git-credentials
+          workspace: git-credentials
+      params:
+        - name: git-url
+          value: $(params.git-url)
+        - name: git-revision
+          value: main
+        - name: manifest-dir
+          value: k8s/overlays/dev
+        - name: image-name
+          value: $(params.image-registry)/agent-dev/$(params.image-name)
+        - name: image-tag
+          value: $(params.image-tag)
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: dev-pipeline-listener
+  namespace: tekton-pipelines
+spec:
+  serviceAccountName: tekton-triggers-sa
+  triggers:
+    - name: github-push-dev
+      interceptors:
+        - ref:
+            name: "github"
+          params:
+            - name: "secretRef"
+              value:
+                secretName: github-webhook-secret
+                secretKey: secret
+            - name: "eventTypes"
+              value: ["push"]
+        - ref:
+            name: "cel"
+          params:
+            - name: "filter"
+              value: "body.ref == 'refs/heads/dev'"
+      bindings:
+        - ref: dev-pipeline-binding
+      template:
+        ref: dev-pipeline-template
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: dev-pipeline-binding
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-revision
+      value: $(body.ref)
+    - name: git-commit-id
+      value: $(body.head_commit.id)
+    - name: git-repo-url
+      value: $(body.repository.clone_url)
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: dev-pipeline-template
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-revision
+    - name: git-commit-id
+    - name: git-repo-url
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: dev-pipeline-run-
+        namespace: tekton-pipelines
+      spec:
+        pipelineRef:
+          name: dev-pipeline
+        params:
+          - name: git-url
+            value: $(tt.params.git-repo-url)
+          - name: git-revision
+            value: dev
+          - name: image-tag
+            value: dev-$(tt.params.git-commit-id)
+        workspaces:
+          - name: shared-workspace
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 1Gi
+          - name: docker-credentials
+            secret:
+              secretName: harbor-credentials
+          - name: git-credentials
+            secret:
+              secretName: git-credentials

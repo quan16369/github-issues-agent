@@ -1,0 +1,245 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: github-agent-alerts
+  namespace: default
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: github-agent.slo
+      interval: 30s
+      rules:
+        # High Error Rate
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(issues_failed_total[5m]))
+              /
+              (sum(rate(issues_processed_total[5m])) + sum(rate(issues_failed_total[5m])))
+            ) * 100 > 5
+          for: 5m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "High error rate detected"
+            description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+            
+        - alert: CriticalErrorRate
+          expr: |
+            (
+              sum(rate(issues_failed_total[5m]))
+              /
+              (sum(rate(issues_processed_total[5m])) + sum(rate(issues_failed_total[5m])))
+            ) * 100 > 15
+          for: 2m
+          labels:
+            severity: critical
+            component: api
+          annotations:
+            summary: "Critical error rate detected"
+            description: "Error rate is {{ $value | humanizePercentage }} (threshold: 15%)"
+
+        # High Latency
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              rate(issue_processing_duration_seconds_bucket[5m])
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "High P95 latency detected"
+            description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+            
+        - alert: CriticalLatency
+          expr: |
+            histogram_quantile(0.95,
+              rate(issue_processing_duration_seconds_bucket[5m])
+            ) > 5
+          for: 2m
+          labels:
+            severity: critical
+            component: api
+          annotations:
+            summary: "Critical P95 latency detected"
+            description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 5s)"
+
+    - name: github-agent.agents
+      interval: 30s
+      rules:
+        # Agent Failures
+        - alert: AgentHighFailureRate
+          expr: |
+            sum by (agent) (rate(agent_executions_total{status="error"}[5m]))
+            /
+            sum by (agent) (rate(agent_executions_total[5m]))
+            > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            component: agent
+          annotations:
+            summary: "Agent {{ $labels.agent }} has high failure rate"
+            description: "Agent {{ $labels.agent }} failure rate: {{ $value | humanizePercentage }}"
+        
+        # Slow Agent
+        - alert: SlowAgentExecution
+          expr: |
+            rate(agent_execution_duration_seconds_sum{agent!~"recommendation|classification"}[5m])
+            /
+            rate(agent_execution_duration_seconds_count{agent!~"recommendation|classification"}[5m])
+            > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            component: agent
+          annotations:
+            summary: "Agent {{ $labels.agent }} is slow"
+            description: "Agent {{ $labels.agent }} avg duration: {{ $value | humanizeDuration }}"
+        
+        # LLM Agents (classification, recommendation) have higher threshold
+        - alert: SlowLLMAgentExecution
+          expr: |
+            rate(agent_execution_duration_seconds_sum{agent=~"recommendation|classification"}[5m])
+            /
+            rate(agent_execution_duration_seconds_count{agent=~"recommendation|classification"}[5m])
+            > 3
+          for: 10m
+          labels:
+            severity: warning
+            component: agent
+          annotations:
+            summary: "LLM Agent {{ $labels.agent }} is slow"
+            description: "Agent {{ $labels.agent }} avg duration: {{ $value | humanizeDuration }}"
+
+    - name: github-agent.resources
+      interval: 30s
+      rules:
+        # High OpenAI Token Usage
+        - alert: HighTokenConsumption
+          expr: |
+            rate(openai_tokens_consumed_total[1h]) > 100000
+          for: 5m
+          labels:
+            severity: warning
+            component: cost
+          annotations:
+            summary: "High OpenAI token consumption"
+            description: "Consuming {{ $value | humanize }} tokens/sec (threshold: 100k/hour)"
+        
+        # Estimated Cost Alert
+        - alert: HighOpenAICost
+          expr: |
+            sum(increase(openai_tokens_consumed_total[6h])) * 0.00002 > 10
+          for: 1m
+          labels:
+            severity: warning
+            component: cost
+          annotations:
+            summary: "High OpenAI cost detected"
+            description: "Estimated cost in last 6h: ${{ $value | humanize }} (threshold: $10)"
+
+        # Vector Search Degradation
+        - alert: SlowVectorSearch
+          expr: |
+            histogram_quantile(0.95,
+              rate(vector_search_duration_seconds_bucket[5m])
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+            component: vector-search
+          annotations:
+            summary: "Vector search is slow"
+            description: "P95 search latency: {{ $value | humanizeDuration }} (threshold: 1s)"
+
+    - name: github-agent.guardrails
+      interval: 30s
+      rules:
+        # High Guardrail Block Rate
+        - alert: HighGuardrailBlockRate
+          expr: |
+            sum(rate(guardrail_blocks_total[5m]))
+            /
+            sum(rate(agent_executions_total{agent=~".*guardrail"}[5m]))
+            > 0.2
+          for: 10m
+          labels:
+            severity: warning
+            component: guardrail
+          annotations:
+            summary: "High guardrail block rate"
+            description: "{{ $value | humanizePercentage }} of requests blocked (threshold: 20%)"
+        
+        # Unusual Block Pattern
+        - alert: UnusualGuardrailActivity
+          expr: |
+            sum by (agent) (rate(guardrail_blocks_total[5m])) > 5
+          for: 5m
+          labels:
+            severity: info
+            component: guardrail
+          annotations:
+            summary: "Unusual {{ $labels.agent }} block activity"
+            description: "{{ $value | humanize }} blocks/sec from {{ $labels.agent }}"
+
+    - name: github-agent.availability
+      interval: 30s
+      rules:
+        # Pod Down
+        - alert: PodDown
+          expr: |
+            kube_pod_status_phase{namespace="default", pod=~"github-agent-.*", phase!="Running"} == 1
+          for: 2m
+          labels:
+            severity: critical
+            component: infrastructure
+          annotations:
+            summary: "Pod {{ $labels.pod }} is not running"
+            description: "Pod {{ $labels.pod }} in phase {{ $labels.phase }}"
+        
+        # Multiple Pods Crashed
+        - alert: MultiplePodsDown
+          expr: |
+            count(kube_pod_status_phase{namespace="default", pod=~"github-agent-.*", phase!="Running"}) > 1
+          for: 1m
+          labels:
+            severity: critical
+            component: infrastructure
+          annotations:
+            summary: "Multiple GitHub Agent pods down"
+            description: "{{ $value }} pods are not running"
+        
+        # No Requests Received
+        - alert: NoRequestsReceived
+          expr: |
+            rate(issues_processed_total[5m]) == 0
+            and
+            rate(issues_failed_total[5m]) == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "No requests received in last 10 minutes"
+            description: "Service may be unreachable or not receiving traffic"
+
+    - name: github-agent.database
+      interval: 30s
+      rules:
+        # CloudSQL Connection Issues
+        - alert: DatabaseConnectionErrors
+          expr: |
+            rate(agent_executions_total{status="error", error_type=~".*Database.*|.*SQL.*"}[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: critical
+            component: database
+          annotations:
+            summary: "Database connection errors detected"
+            description: "{{ $value | humanize }} database errors/sec"

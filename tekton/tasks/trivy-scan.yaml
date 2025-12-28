@@ -1,0 +1,97 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: trivy-scan
+  namespace: tekton-pipelines
+spec:
+  description: Scan container image for vulnerabilities using Trivy
+  params:
+    - name: image
+      description: Reference of the image to scan
+      type: string
+    - name: severity
+      description: Severity levels to fail on (comma-separated)
+      type: string
+      default: "CRITICAL,HIGH"
+    - name: exit-code
+      description: Exit code when vulnerabilities are found
+      type: string
+      default: "1"
+    - name: format
+      description: Output format (table, json, sarif)
+      type: string
+      default: "table"
+    - name: skip-dirs
+      description: Directories to skip scanning
+      type: string
+      default: ""
+    - name: timeout
+      description: Scan timeout duration
+      type: string
+      default: "5m"
+  workspaces:
+    - name: manifest-dir
+      description: Workspace to store scan results
+      optional: true
+  results:
+    - name: scan-result
+      description: Scan result summary
+  steps:
+    - name: trivy-scan
+      image: aquasec/trivy:0.48.0
+      env:
+        - name: TRIVY_CACHE_DIR
+          value: /tmp/trivy
+      script: |
+        #!/bin/sh
+        set -e
+        
+        echo "Scanning image: $(params.image)"
+        echo "Severity levels: $(params.severity)"
+        
+        # Create cache directory
+        mkdir -p ${TRIVY_CACHE_DIR}
+        
+        # Update vulnerability database
+        trivy image --download-db-only
+        
+        # Scan image
+        SCAN_OUTPUT=$(mktemp)
+        
+        trivy image \
+          --severity $(params.severity) \
+          --exit-code $(params.exit-code) \
+          --format $(params.format) \
+          --timeout $(params.timeout) \
+          --no-progress \
+          $(params.image) | tee ${SCAN_OUTPUT}
+        
+        # Extract summary
+        CRITICAL=$(grep -c "CRITICAL" ${SCAN_OUTPUT} || echo "0")
+        HIGH=$(grep -c "HIGH" ${SCAN_OUTPUT} || echo "0")
+        MEDIUM=$(grep -c "MEDIUM" ${SCAN_OUTPUT} || echo "0")
+        LOW=$(grep -c "LOW" ${SCAN_OUTPUT} || echo "0")
+        
+        SUMMARY="CRITICAL:${CRITICAL} HIGH:${HIGH} MEDIUM:${MEDIUM} LOW:${LOW}"
+        echo -n "${SUMMARY}" > $(results.scan-result.path)
+        
+        echo ""
+        echo "Scan Summary: ${SUMMARY}"
+        
+        # Save detailed report if workspace provided
+        if [ -d "$(workspaces.manifest-dir.path)" ]; then
+          trivy image \
+            --severity $(params.severity) \
+            --format json \
+            --output $(workspaces.manifest-dir.path)/trivy-report.json \
+            $(params.image)
+          
+          echo "Detailed report saved to trivy-report.json"
+        fi
+        
+        if [ "${CRITICAL}" -gt "0" ] || [ "${HIGH}" -gt "0" ]; then
+          echo "Vulnerabilities found! Build failed."
+          exit $(params.exit-code)
+        fi
+        
+        echo "No critical vulnerabilities found!"

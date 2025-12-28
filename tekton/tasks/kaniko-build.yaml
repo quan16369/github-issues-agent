@@ -1,0 +1,76 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kaniko-build
+  namespace: tekton-pipelines
+spec:
+  description: Build and push Docker image using Kaniko
+  params:
+    - name: image
+      description: Reference of the image to build (with tag)
+      type: string
+    - name: dockerfile
+      description: Path to the Dockerfile
+      type: string
+      default: ./docker/prod-optimized.Dockerfile
+    - name: context
+      description: Build context directory
+      type: string
+      default: .
+    - name: extra-args
+      description: Extra args to pass to kaniko
+      type: array
+      default: []
+    - name: builder-image
+      description: The kaniko image to use
+      type: string
+      default: gcr.io/kaniko-project/executor:v1.17.0
+  workspaces:
+    - name: source
+      description: Workspace containing source code
+    - name: dockerconfig
+      description: Docker config for authentication
+      optional: true
+  results:
+    - name: image-digest
+      description: Digest of the image just built
+    - name: image-url
+      description: URL of the image just built
+  steps:
+    - name: build-and-push
+      image: $(params.builder-image)
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: DOCKER_CONFIG
+          value: /kaniko/.docker
+      script: |
+        #!/busybox/sh
+        set -e
+        
+        echo "Building image: $(params.image)"
+        echo "Dockerfile: $(params.dockerfile)"
+        echo "Context: $(params.context)"
+        
+        # Copy docker config if provided
+        if [ -d "$(workspaces.dockerconfig.path)" ]; then
+          cp $(workspaces.dockerconfig.path)/config.json /kaniko/.docker/config.json
+        fi
+        
+        # Build and push
+        /kaniko/executor \
+          --dockerfile=$(params.dockerfile) \
+          --context=$(workspaces.source.path)/$(params.context) \
+          --destination=$(params.image) \
+          --cache=true \
+          --cache-ttl=24h \
+          --compressed-caching=false \
+          --snapshot-mode=redo \
+          --use-new-run \
+          --digest-file=$(results.image-digest.path) \
+          $(params.extra-args[*])
+        
+        echo -n "$(params.image)" > $(results.image-url.path)
+        echo "Image built and pushed: $(params.image)"
+        echo "Digest: $(cat $(results.image-digest.path))"
+  securityContext:
+    runAsUser: 0

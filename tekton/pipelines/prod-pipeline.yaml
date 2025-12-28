@@ -1,0 +1,219 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: prod-pipeline
+  namespace: tekton-pipelines
+  labels:
+    environment: production
+spec:
+  description: Production pipeline - triggered on git tag creation
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL
+      default: https://github.com/your-org/github-issue-agent.git
+    - name: git-tag
+      type: string
+      description: Git tag (version)
+    - name: image-registry
+      type: string
+      description: Harbor registry URL
+      default: harbor.example.com
+    - name: image-name
+      type: string
+      description: Image name
+      default: github-agent
+    - name: staging-image-tag
+      type: string
+      description: Staging image tag to promote
+  
+  workspaces:
+    - name: shared-workspace
+    - name: docker-credentials
+    - name: git-credentials
+      optional: true
+  
+  tasks:
+    # 1. Clone source code at tag
+    - name: fetch-repository
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-tag)
+    
+    # 2. Run full test suite
+    - name: run-tests
+      taskRef:
+        name: run-tests
+      runAfter:
+        - fetch-repository
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: python-version
+          value: "3.11"
+    
+    # 3. Promote staging image to production
+    - name: promote-image
+      taskRef:
+        name: push-to-harbor
+      runAfter:
+        - run-tests
+      workspaces:
+        - name: dockerconfig
+          workspace: docker-credentials
+      params:
+        - name: source-image
+          value: $(params.image-registry)/agent-staging/$(params.image-name):$(params.staging-image-tag)
+        - name: target-image
+          value: $(params.image-registry)/agent-prod/$(params.image-name):$(params.git-tag)
+    
+    # 4. Final security scan on production image
+    - name: security-scan
+      taskRef:
+        name: trivy-scan
+      runAfter:
+        - promote-image
+      workspaces:
+        - name: manifest-dir
+          workspace: shared-workspace
+      params:
+        - name: image
+          value: $(params.image-registry)/agent-prod/$(params.image-name):$(params.git-tag)
+        - name: severity
+          value: "CRITICAL,HIGH"
+        - name: exit-code
+          value: "1"
+    
+    # 5. Tag as latest
+    - name: tag-latest
+      taskRef:
+        name: push-to-harbor
+      runAfter:
+        - security-scan
+      workspaces:
+        - name: dockerconfig
+          workspace: docker-credentials
+      params:
+        - name: source-image
+          value: $(params.image-registry)/agent-prod/$(params.image-name):$(params.git-tag)
+        - name: target-image
+          value: $(params.image-registry)/agent-prod/$(params.image-name):latest
+    
+    # 6. Update production manifest
+    - name: update-manifest
+      taskRef:
+        name: update-manifest
+      runAfter:
+        - tag-latest
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: git-credentials
+          workspace: git-credentials
+      params:
+        - name: git-url
+          value: $(params.git-url)
+        - name: git-revision
+          value: main
+        - name: manifest-dir
+          value: k8s/overlays/prod
+        - name: image-name
+          value: $(params.image-registry)/agent-prod/$(params.image-name)
+        - name: image-tag
+          value: $(params.git-tag)
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: prod-pipeline-listener
+  namespace: tekton-pipelines
+spec:
+  serviceAccountName: tekton-triggers-sa
+  triggers:
+    - name: github-tag-release
+      interceptors:
+        - ref:
+            name: "github"
+          params:
+            - name: "secretRef"
+              value:
+                secretName: github-webhook-secret
+                secretKey: secret
+            - name: "eventTypes"
+              value: ["create"]
+        - ref:
+            name: "cel"
+          params:
+            - name: "filter"
+              value: "body.ref_type == 'tag' && body.ref.startsWith('v')"
+      bindings:
+        - ref: prod-pipeline-binding
+      template:
+        ref: prod-pipeline-template
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: prod-pipeline-binding
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-tag
+      value: $(body.ref)
+    - name: git-repo-url
+      value: $(body.repository.clone_url)
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: prod-pipeline-template
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: git-tag
+    - name: git-repo-url
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: prod-pipeline-run-
+        namespace: tekton-pipelines
+        labels:
+          environment: production
+          version: $(tt.params.git-tag)
+      spec:
+        pipelineRef:
+          name: prod-pipeline
+        params:
+          - name: git-url
+            value: $(tt.params.git-repo-url)
+          - name: git-tag
+            value: $(tt.params.git-tag)
+          - name: staging-image-tag
+            value: staging-latest  # Or get from staging manifest
+        workspaces:
+          - name: shared-workspace
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 1Gi
+          - name: docker-credentials
+            secret:
+              secretName: harbor-credentials
+          - name: git-credentials
+            secret:
+              secretName: git-credentials

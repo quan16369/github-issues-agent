@@ -1,3 +1,4 @@
+import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ from loguru import logger
 from src.agents.graph import build_issue_workflow
 from src.models.agent_models import IssueState
 from src.models.api_model import ErrorResponse, HealthResponse, IssueRequest
+from src.utils.telemetry import get_app_metrics, initialize_telemetry, instrument_fastapi
 
 # Global cache
 compiled_graph = None
@@ -20,14 +22,32 @@ compiled_graph = None
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown events"""
     global compiled_graph
-    logger.info("🚀 Starting up Issue Processing API...")
+    logger.info("Starting up Issue Processing API...")
+
+    # Initialize OpenTelemetry
+    try:
+        environment = os.getenv("ENVIRONMENT", "production")
+        service_version = os.getenv("SERVICE_VERSION", "1.0.0")
+        otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
+        
+        initialize_telemetry(
+            service_name="github-issue-agent",
+            service_version=service_version,
+            environment=environment,
+            otlp_endpoint=otlp_endpoint,
+            enable_prometheus=True,
+            prometheus_port=8001,
+        )
+        logger.info("OpenTelemetry initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize OpenTelemetry: {e}")
 
     # Pre-compile the graph for better performance
     try:
         compiled_graph = build_issue_workflow().compile()
-        logger.info("✅ Workflow graph compiled successfully")
+        logger.info("Workflow graph compiled successfully")
     except Exception as e:
-        logger.error(f"❌ Failed to compile workflow graph: {e}")
+        logger.error(f"Failed to compile workflow graph: {e}")
         raise
 
     yield
@@ -40,6 +60,9 @@ app = FastAPI(
     description="Process GitHub issues, classify them, and provide recommendations.",
     lifespan=lifespan,
 )
+
+# Instrument FastAPI with OpenTelemetry
+instrument_fastapi(app)
 
 # Middleware
 app.add_middleware(
@@ -129,10 +152,16 @@ async def process_issue(
     and security recommendations.
     """
     start_time = time.time()
+    
+    # Get metrics
+    try:
+        app_metrics = get_app_metrics()
+    except RuntimeError:
+        app_metrics = None
 
     try:
         # Log processing start
-        logger.info(f"🔍 Processing issue: '{request.title}' (body length: {len(request.body)} chars)")
+        logger.info(f"Processing issue: '{request.title}' (body length: {len(request.body)} chars)")
 
         # Process the issue
         result = await graph.ainvoke(
@@ -145,24 +174,35 @@ async def process_issue(
         # Log processing completion
         processing_time = time.time() - start_time
 
+        # Record metrics
+        if app_metrics:
+            app_metrics.issues_processed_counter.add(1, {"status": "success"})
+            app_metrics.issue_processing_duration.record(processing_time)
+
         # Create response
         response = IssueState(**result)
 
         # Log results summary
-        blocked_status = "🚫 BLOCKED" if response.blocked else "✅ PASSED"
-        logger.info(f"🏁 Issue processed: '{request.title}' - {blocked_status} - Time: {processing_time:.3f}s")
+        blocked_status = "BLOCKED" if response.blocked else "PASSED"
+        logger.info(f"Issue processed: '{request.title}' - {blocked_status} - Time: {processing_time:.3f}s")
 
         # Log validation details if blocked
         if response.blocked and hasattr(response, "validation_summary"):
             validation = response.validation_summary
             if isinstance(validation, dict):
                 failure_reason = validation.get("failure_reason", "Unknown")
-                logger.warning(f"🔴 Blocking reason: {failure_reason}")
+                logger.warning(f"Blocking reason: {failure_reason}")
 
         return response
 
     except Exception as e:
         processing_time = time.time() - start_time
+        
+        # Record failure metrics
+        if app_metrics:
+            app_metrics.issues_failed_counter.add(1, {"error_type": type(e).__name__})
+            app_metrics.issue_processing_duration.record(processing_time)
+        
         logger.error(f"💥 Processing failed for '{request.title}': {str(e)} (after {processing_time:.3f}s)")
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}") from e
 
