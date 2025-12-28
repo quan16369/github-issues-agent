@@ -1,5 +1,6 @@
 """Traced wrapper for agents to add OpenTelemetry spans"""
 
+import asyncio
 import time
 from functools import wraps
 from typing import Any, Callable
