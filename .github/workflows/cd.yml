@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy
+    name: Deploy to GKE
     runs-on: ubuntu-latest
     environment: production
 
@@ -23,26 +23,28 @@ jobs:
         with:
           python-version: 3.12
 
-      # Step 3: Configure AWS credentials using secrets
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.2.1
+      # Step 3: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      # Step 4: Set AWS_PROFILE environment variable for kubectl
-      - name: Set AWS_PROFILE for kubectl
+      # Step 4: Set up Cloud SDK
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      # Step 5: Configure Docker to use gcloud as credential helper
+      - name: Configure Docker for GCR
         run: |
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }} --profile ${{ secrets.AWS_PROFILE }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }} --profile ${{ secrets.AWS_PROFILE }}
-          aws configure set region ${{ secrets.AWS_REGION }} --profile ${{ secrets.AWS_PROFILE }}
-          echo "AWS_PROFILE=${{ secrets.AWS_PROFILE }}" >> $GITHUB_ENV
+          gcloud auth configure-docker gcr.io
 
-      # Step 5: Set up .env file for Docker Compose
+      # Step 6: Set up .env file
       - name: Set up .env.${{ secrets.APP_ENV }} file
         run: |
           echo "APP_ENV=${{ secrets.APP_ENV }}" > .env.${{ secrets.APP_ENV }}
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> .env.${{ secrets.APP_ENV }}
           echo "GUARDRAILS_API_KEY=${{ secrets.GUARDRAILS_API_KEY }}" >> .env.${{ secrets.APP_ENV }}
           echo "QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}" >> .env.${{ secrets.APP_ENV }}
           echo "QDRANT_URL=${{ secrets.QDRANT_URL }}" >> .env.${{ secrets.APP_ENV }}
@@ -59,63 +61,38 @@ jobs:
           echo "CHUNK_SIZE=${{ secrets.CHUNK_SIZE }}" >> .env.${{ secrets.APP_ENV }}
           echo "BATCH_SIZE=${{ secrets.BATCH_SIZE }}" >> .env.${{ secrets.APP_ENV }}
 
-      # Step 6: Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3.11.0
-
-      # Step 7: Log in to Amazon ECR
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2.0.1
-
-      # Step 8: Build and push Docker image to ECR
-      - name: Build and push Docker image to ECR
+      # Step 7: Build and push Docker image to GCR
+      - name: Build and push Docker image to GCR
         run: |
-          IMAGE_NAME=myapp-${{ secrets.APP_ENV }}-image
-          ECR_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fastapi-app
+          IMAGE_NAME=fastapi-app
+          GCR_URI=gcr.io/${{ secrets.GCP_PROJECT_ID }}/${IMAGE_NAME}
 
-          docker compose --env-file .env.${{ secrets.APP_ENV }} -f docker/docker-compose.yml build app
-          docker tag ${IMAGE_NAME}:latest $ECR_URI:latest
-          docker push $ECR_URI:latest
+          docker build -f docker/${{ secrets.APP_ENV }}.Dockerfile -t ${IMAGE_NAME}:latest .
+          docker tag ${IMAGE_NAME}:latest ${GCR_URI}:latest
+          docker tag ${IMAGE_NAME}:latest ${GCR_URI}:${{ github.sha }}
+          docker push ${GCR_URI}:latest
+          docker push ${GCR_URI}:${{ github.sha }}
 
-      # Step 9: Set up kubectl with KUBECONFIG from secret
-      - name: Set up kubectl
+      # Step 8: Get GKE credentials
+      - name: Get GKE credentials
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
 
-
-      # Step 10: Update Kubernetes Deployment with new image
-      - name: Update Kubernetes Deployment with new image
+      # Step 9: Deploy to GKE
+      - name: Deploy to GKE
         run: |
-          kubectl set image deployment/fastapi-deployment fastapi=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/myapp-${{ secrets.APP_ENV }}-image:latest -n my-app
+          # Update image in deployment
+          kubectl set image deployment/fastapi-deployment \
+            fastapi=gcr.io/${{ secrets.GCP_PROJECT_ID }}/fastapi-app:${{ github.sha }} \
+            -n my-app
 
-      # Step 11: Test kubectl access
-      - name: Test kubectl access
-        run: |
-          kubectl cluster-info
-          kubectl get nodes
+          # Wait for rollout to complete
+          kubectl rollout status deployment/fastapi-deployment -n my-app
 
-      # Step 12: Get pods
-      - name: Get pods
+      # Step 10: Verify deployment
+      - name: Verify deployment
         run: |
-          kubectl get pods -A
-
-      # Step 13: Get LoadBalancer URL
-      - name: Get LoadBalancer URL
-        run: |
-          LB_URL=$(kubectl get svc fastapi-external -n my-app -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "The LoadBalancer URL is: $LB_URL"
-          echo "LB_URL=$LB_URL" >> $GITHUB_ENV
-
-      # Step 14: Test FastAPI endpoint
-      - name: Test FastAPI endpoint
-        run: |
-          echo "Testing FastAPI endpoint..."
-          timeout 60s bash -c 'until curl -s http://$LB_URL/health; do sleep 2; done'
-          echo "LB URL: $LB_URL"
-          curl -X POST "http://$LB_URL/process-issue" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "title": "Test Issue",
-              "body": "huberregressor"
-            }'
+          kubectl get pods -n my-app
+          kubectl get services -n my-app
