@@ -64,7 +64,7 @@ jobs:
       # Step 7: Build and push Docker image to GCR
       - name: Build and push Docker image to GCR
         run: |
-          IMAGE_NAME=fastapi-app
+          IMAGE_NAME=github-agent
           GCR_URI=gcr.io/${{ secrets.GCP_PROJECT_ID }}/${IMAGE_NAME}
 
           docker build -f docker/${{ secrets.APP_ENV }}.Dockerfile -t ${IMAGE_NAME}:latest .
@@ -84,12 +84,12 @@ jobs:
       - name: Deploy to GKE
         run: |
           # Update image in deployment
-          kubectl set image deployment/fastapi-deployment \
-            fastapi=gcr.io/${{ secrets.GCP_PROJECT_ID }}/fastapi-app:${{ github.sha }} \
+          kubectl set image deployment/github-agent \
+            github-agent=gcr.io/${{ secrets.GCP_PROJECT_ID }}/github-agent:${{ github.sha }} \
             -n my-app
 
           # Wait for rollout to complete
-          kubectl rollout status deployment/fastapi-deployment -n my-app
+          kubectl rollout status deployment/github-agent -n my-app
 
       # Step 10: Verify deployment
       - name: Verify deployment
