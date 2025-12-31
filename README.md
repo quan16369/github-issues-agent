@@ -75,6 +75,7 @@ This is a cloud-native LangGraph agent application for processing GitHub issues.
 - [Infrastructure Guide](iac/terraform/README.md) - Terraform setup and configuration
 - [Platform Tools](kubernetes/platform-tools/README.md) - Kubernetes platform installation
 - [OpenTelemetry](docs/OPENTELEMETRY.md) - Observability implementation details
+- [ELK Stack](elk/README.md) - Centralized logging with Elasticsearch, Kibana, Filebeat
 - [Docker Images](docker/README.md) - Multi-variant Dockerfile comparison
 - [CI/CD Pipelines](tekton/pipelines/README.md) - Tekton pipeline configuration
 - [ArgoCD Setup](argocd/README.md) - GitOps deployment configuration
@@ -113,6 +114,7 @@ This is a cloud-native LangGraph agent application for processing GitHub issues.
 - **Jaeger**: Distributed tracing
 - **OpenTelemetry**: Unified observability framework
 - **Alertmanager**: Alert routing and management
+- **ELK Stack**: Centralized logging (Elasticsearch, Kibana, Filebeat)
 
 ## Architecture
 
