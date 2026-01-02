@@ -71,15 +71,12 @@ This is a cloud-native LangGraph agent application for processing GitHub issues.
 ## Documentation
 
 - [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete production deployment instructions
-- [Migration Summary](MIGRATION_SUMMARY.md) - GCP migration achievements and results
 - [Infrastructure Guide](iac/terraform/README.md) - Terraform setup and configuration
 - [Platform Tools](kubernetes/platform-tools/README.md) - Kubernetes platform installation
 - [OpenTelemetry](docs/OPENTELEMETRY.md) - Observability implementation details
 - [ELK Stack](elk/README.md) - Centralized logging with Elasticsearch, Kibana, Filebeat
-- [Docker Images](docker/README.md) - Multi-variant Dockerfile comparison
 - [CI/CD Pipelines](tekton/pipelines/README.md) - Tekton pipeline configuration
 - [ArgoCD Setup](argocd/README.md) - GitOps deployment configuration
-- [Monitoring & Alerts](alerts/README.md) - Prometheus alerts and Alertmanager
 
 ## Technology Stack
 
