@@ -11,7 +11,20 @@ spec:
   source:
     repoURL: https://github.com/your-org/github-issue-agent.git
     targetRevision: main
-    path: kubernetes/manifests/overlays/dev
+    path: helm_charts/github-agent
+    helm:
+      releaseName: github-agent-dev
+      values: |
+        replicaCount: 1
+        image:
+          tag: latest
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
   
   destination:
     server: https://kubernetes.default.svc

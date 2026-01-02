@@ -100,7 +100,6 @@ This is a cloud-native LangGraph agent application for processing GitHub issues.
 ### DevSecOps Tools
 - **Terraform**: Infrastructure as Code
 - **Helm**: Kubernetes package manager
-- **Kustomize**: Kubernetes configuration management
 - **Tekton**: Cloud-native CI/CD pipelines
 - **ArgoCD**: GitOps continuous delivery
 - **Harbor**: Container registry with vulnerability scanning
