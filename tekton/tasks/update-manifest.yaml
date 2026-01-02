@@ -4,7 +4,7 @@ metadata:
   name: update-manifest
   namespace: tekton-pipelines
 spec:
-  description: Update Kubernetes manifests with new image tag using Kustomize
+  description: Update Helm chart values with new image tag
   params:
     - name: git-url
       description: Git repository URL
@@ -13,9 +13,10 @@ spec:
       description: Git branch to update
       type: string
       default: main
-    - name: manifest-dir
-      description: Directory containing Kustomize manifests
+    - name: values-file
+      description: Path to Helm values.yaml file
       type: string
+      default: helm_charts/github-agent/values.yaml
     - name: image-name
       description: Image name to update
       type: string
@@ -60,23 +61,20 @@ spec:
         git checkout $(params.git-revision)
         
     - name: update-image
-      image: k8s.gcr.io/kustomize/kustomize:v5.0.0
+      image: alpine/helm:3.13.0
       workingDir: $(workspaces.source.path)/repo
       script: |
         #!/bin/sh
         set -e
         
-        echo "Updating manifest in: $(params.manifest-dir)"
+        echo "Updating values file: $(params.values-file)"
         echo "Image: $(params.image-name):$(params.image-tag)"
         
-        cd $(params.manifest-dir)
+        # Update image tag in values.yaml using sed
+        sed -i "s|tag:.*|tag: \"$(params.image-tag)\"|g" $(params.values-file)
         
-        # Update image using kustomize
-        kustomize edit set image \
-          $(params.image-name)=$(params.image-name):$(params.image-tag)
-        
-        echo "Manifest updated"
-        cat kustomization.yaml
+        echo "Values updated"
+        cat $(params.values-file)
         
     - name: commit-and-push
       image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.40.2

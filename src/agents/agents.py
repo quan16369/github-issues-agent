@@ -6,7 +6,7 @@ from src.agents.graph_service import services
 from src.models.agent_models import ClassificationState, IssueState, Recommendation
 from src.utils.error_handler import ErrorHandler
 from src.utils.guardrails import guardrail_validator
-from src.utils.promps import PromptTemplates
+from src.utils.prompts import PromptTemplates
 from src.utils.traced_agents import trace_agent
 
 # ========================================
