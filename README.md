@@ -81,7 +81,7 @@ This is a cloud-native LangGraph agent application for processing GitHub issues.
 ## Technology Stack
 
 ### Core Application
-- **Python 3.11+**: Application runtime
+- **Python 3.12+**: Application runtime
 - **FastAPI**: REST API framework
 - **LangGraph**: Agent orchestration
 - **PostgreSQL**: Relational database

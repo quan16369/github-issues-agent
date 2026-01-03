@@ -99,7 +99,7 @@ spec:
         git config user.name "$(params.git-name)"
         
         # Commit changes
-        git add $(params.manifest-dir)/kustomization.yaml
+        git add $(params.values-file)
         
         if git diff --cached --quiet; then
           echo "No changes to commit"
@@ -110,7 +110,7 @@ spec:
 
         Updated by Tekton Pipeline
         Image: $(params.image-name):$(params.image-tag)
-        Manifest: $(params.manifest-dir)"
+        Values file: $(params.values-file)"
         
         # Push changes
         git push origin $(params.git-revision)

@@ -34,7 +34,7 @@ RUN python -m nltk.downloader -d /usr/local/share/nltk_data \
     punkt stopwords wordnet averaged_perceptron_tagger || true
 
 # Runtime stage: Minimal image with only runtime dependencies
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser -u 1000 appuser
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean
 
 # Copy Python packages from builder
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /usr/local/share/nltk_data /usr/local/share/nltk_data
 
